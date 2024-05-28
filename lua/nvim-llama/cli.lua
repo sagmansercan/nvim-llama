@@ -25,7 +25,6 @@ M.run_command = function(cmd, args, callback)
         assert(not err, err)
         if data then
             for _, line in ipairs(vim.split(data, '\n')) do
-                print(line)
                 if line == '' then
                     goto continue
                 end
