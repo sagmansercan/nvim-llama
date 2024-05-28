@@ -1,7 +1,10 @@
 local M = {}
 
+local http = require 'nvim-llama.http'
+
 M.default_opts = {
     model = 'llama3:latest',
+    ollama_host = 'http://127.0.0.1:11434',
 }
 
 M.opts = {}
@@ -70,20 +73,6 @@ local function http_post_request(url, data, callback)
     end)
 end
 
-local function write_to_buffer(buf, result, explanation)
-    local result_table = vim.split(result, '\n')
-    for _, line in ipairs(result_table) do
-        local decoded = vim.fn.json_decode(line)
-        if decoded and decoded.response then
-            local decoded_split = vim.split(decoded.response, '\n')
-            for _, response in ipairs(decoded_split) do
-                explanation = explanation .. response
-            end
-            vim.api.nvim_buf_set_lines(buf, -1, -1, false, { explanation })
-        end
-    end
-end
-
 -- Function to run ollama with the selected code and explain what it does
 function M.explain_code()
     local selected_lines = vim.fn.getline("'<", "'>")
@@ -101,38 +90,37 @@ function M.explain_code()
 
     -- Construct the command to send to OLLaMa
     local model = M.opts.model
-    local url = 'http://127.0.0.1:11434/api/generate'
+    local url = M.opts.ollama_host .. '/api/generate'
     local data = {
         model = model,
         prompt = table.concat(prompt, '\n'),
-        stream = false,
+        stream = true,
     }
 
     notify('Sending request to ' .. M.opts.model .. ' ...', vim.log.levels.INFO)
 
     -- get current cursor position to open the buffer
-    local cursor_row = vim.api.nvim_win_get_cursor(0)[1]
-    local cursor_col = vim.api.nvim_win_get_cursor(0)[2]
+    -- local cursor_row = vim.api.nvim_win_get_cursor(0)[1]
+    -- local cursor_col = vim.api.nvim_win_get_cursor(0)[2]
     local buf = vim.api.nvim_create_buf(false, true)
-    vim.api.nvim_open_win(buf, true, {
+    local win = vim.api.nvim_open_win(buf, true, {
         relative = 'editor',
-        width = vim.o.columns - 80,
-        height = vim.o.lines - 40,
-        col = cursor_col,
-        row = cursor_row,
+        width = math.floor((50 * vim.o.columns) / 100),
+        height = math.floor((80 * vim.o.lines) / 100),
+        col = math.floor((2 * vim.o.columns) / 3),
+        row = 7,
         border = 'rounded',
+        style = 'minimal',
     })
-    http_post_request(url, data, function(result)
-        local parsed_result = vim.fn.json_decode(result)
-        if parsed_result and parsed_result.response then
-            vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(parsed_result.response, '\n'))
-        else
-            if parsed_result.done then
-                write_to_buffer(buf, result, { 'END' })
-                notify('Request completed', vim.log.levels.INFO)
-            end
-            notify('Failed to get response from ollama', vim.log.levels.WARN)
-        end
+    vim.api.nvim_set_option_value('filetype', 'markdown', { buf = buf })
+
+    -- send the request
+    http.post(url, data, function(result)
+        local last_line_number = vim.api.nvim_buf_line_count(buf) - 1 -- Zero-based index for lines
+        local last_line = vim.api.nvim_buf_get_lines(buf, last_line_number, last_line_number + 1, false)[1] -- Get the last line
+        last_line = last_line .. result.response
+
+        vim.api.nvim_buf_set_lines(buf, last_line_number, last_line_number + 1, false, vim.split(last_line, '\n'))
     end)
 end
 
