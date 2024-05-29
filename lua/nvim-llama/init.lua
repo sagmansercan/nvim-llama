@@ -20,59 +20,6 @@ local function notify(message, level)
     vim.api.nvim_notify(message, level, {})
 end
 
-local function http_post_request(url, data, callback)
-    local payload = vim.fn.json_encode(data)
-    local headers = {
-        'Content-Type: application/json',
-        'Content-Length: ' .. #payload,
-    }
-
-    -- local response_body = {}
-    local curl_job = vim.system({
-        'curl',
-        '-X',
-        'POST',
-        '-s',
-        '-H',
-        headers[1],
-        '-H',
-        headers[2],
-        '-d',
-        payload,
-        url,
-    }, {
-        timeout = 60 * 1000,
-        stdout = function(err, response_data)
-            if response_data then
-                -- table.insert(response_body, response_data)
-                vim.schedule(function()
-                    -- local result = table.concat(response_body, '\n')
-                    callback(response_data, false)
-                end)
-            end
-        end,
-        stderr = function(err)
-            vim.schedule(function()
-                if err then
-                    notify(err, vim.log.levels.ERROR)
-                end
-            end)
-        end,
-    }, function(system_completed_obj)
-        vim.schedule(function()
-            if system_completed_obj.code == 0 then
-                notify('Request completed', vim.log.levels.INFO)
-                return
-            end
-            if system_completed_obj.code == 124 then
-                notify('Request timed out', vim.log.levels.ERROR)
-                return
-            end
-            notify('Request failed with unhandled code ' .. system_completed_obj.code, vim.log.levels.ERROR)
-        end)
-    end)
-end
-
 -- Function to run ollama with the selected code and explain what it does
 function M.explain_code()
     local selected_lines = vim.fn.getline("'<", "'>")
